@@ -1,121 +1,160 @@
+# CSE First Semester Project - Library Portal
+# Built using basic Python data structures and JSON storage
+
 import json
 import os
 
-class Book:
-    def __init__(self, book_id, title, author, is_issued=False):
-        self.book_id = book_id
-        self.title = title
-        self.author = author
-        self.is_issued = is_issued
-
-    def to_dict(self):
-        return {
-            "book_id": self.book_id,
-            "title": self.title,
-            "author": self.author,
-            "is_issued": self.is_issued
-        }
-
-    @staticmethod
-    def from_dict(data):
-        return Book(data["book_id"], data["title"], data["author"], data["is_issued"])
+# File where book data gets saved locally
+DATA_FILE = "books_data.json"
 
 
-class Library:
-    def __init__(self, data_file="library_data.json"):
-        self.data_file = data_file
-        self.books = {}
-        self.load_data()
+def load_all_books():
+    """Reads saved books from the JSON file if it exists."""
+    if not os.path.exists(DATA_FILE):
+        return {}
+    
+    try:
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        # If file is corrupted or empty, start fresh
+        return {}
 
-    def load_data(self):
-        if os.path.exists(self.data_file):
-            with open(self.data_file, "r") as f:
-                try:
-                    data = json.load(f)
-                    for b_id, b_info in data.items():
-                        self.books[b_id] = Book.from_dict(b_info)
-                except json.JSONDecodeError:
-                    self.books = {}
 
-    def save_data(self):
-        with open(self.data_file, "w") as f:
-            json.dump({b_id: book.to_dict() for b_id, book in self.books.items()}, f, indent=4)
+def save_all_books(catalog):
+    """Saves the current catalog dictionary back to JSON."""
+    with open(DATA_FILE, "w") as f:
+        json.dump(catalog, f, indent=2)
 
-    def add_book(self, book_id, title, author):
-        if book_id in self.books:
-            print(f"\n[!] Book ID {book_id} already exists.")
-            return
-        self.books[book_id] = Book(book_id, title, author)
-        self.save_data()
-        print(f"\n[+] Book '{title}' added successfully!")
 
-    def display_books(self):
-        if not self.books:
-            print("\n[-] No books found in the library.")
-            return
-        print("\n--- Library Catalog ---")
-        for book in self.books.values():
-            status = "Issued" if book.is_issued else "Available"
-            print(f"ID: {book.book_id} | Title: {book.title} | Author: {book.author} | Status: {status}")
+def add_new_book(catalog):
+    print("\n--- ADD A NEW BOOK ---")
+    book_num = input("Enter Book Accession ID: ").strip()
+    
+    if book_num in catalog:
+        print("ERROR: A book with this ID already exists!")
+        return
 
-    def issue_book(self, book_id):
-        if book_id not in self.books:
-            print(f"\n[!] Book ID {book_id} not found.")
-            return
-        if self.books[book_id].is_issued:
-            print(f"\n[!] Book ID {book_id} is already issued.")
-            return
-        self.books[book_id].is_issued = True
-        self.save_data()
-        print(f"\n[+] Book ID {book_id} successfully issued.")
+    title = input("Enter Book Title: ").strip()
+    author = input("Enter Author Name: ").strip()
+    rack_no = input("Enter Shelf/Rack Number (e.g. A-12): ").strip()
 
-    def return_book(self, book_id):
-        if book_id not in self.books:
-            print(f"\n[!] Book ID {book_id} not found.")
-            return
-        if not self.books[book_id].is_issued:
-            print(f"\n[!] Book ID {book_id} was not issued.")
-            return
-        self.books[book_id].is_issued = False
-        self.save_data()
-        print(f"\n[+] Book ID {book_id} successfully returned.")
+    if title == "" or author == "":
+        print("ERROR: Title and Author cannot be empty.")
+        return
+
+    # Store as a simple dictionary entry
+    catalog[book_num] = {
+        "title": title,
+        "author": author,
+        "shelf": rack_no if rack_no else "Unassigned",
+        "issued": False
+    }
+
+    save_all_books(catalog)
+    print(f"Success! Added '{title}' to the library catalog.")
+
+
+def show_books(catalog):
+    print("\n--- CURRENT LIBRARY CATALOG ---")
+    if not catalog:
+        print("No books registered in the system yet.")
+        return
+
+    for b_id, info in catalog.items():
+        if info["issued"]:
+            status_str = "ISSUED"
+        else:
+            status_str = "AVAILABLE"
+            
+        print(f"[{b_id}] {info['title']} by {info['author']} | Shelf: {info['shelf']} | Status: {status_str}")
+
+
+def search_books(catalog):
+    print("\n--- SEARCH BOOKS ---")
+    query = input("Enter Title or Author keyword: ").strip().lower()
+    
+    if not query:
+        print("Search query cannot be blank.")
+        return
+
+    found_count = 0
+    for b_id, info in catalog.items():
+        if query in info['title'].lower() or query in info['author'].lower():
+            status = "Issued" if info["issued"] else "Available"
+            print(f"-> ID: {b_id} | {info['title']} by {info['author']} ({status})")
+            found_count += 1
+            
+    if found_count == 0:
+        print("No matching books found.")
+
+
+def issue_book(catalog):
+    print("\n--- ISSUE BOOK ---")
+    b_id = input("Enter Book ID to issue: ").strip()
+
+    if b_id not in catalog:
+        print("Book ID not found in system.")
+        return
+
+    if catalog[b_id]["issued"]:
+        print("Sorry, this book is already issued to someone else.")
+        return
+
+    catalog[b_id]["issued"] = True
+    save_all_books(catalog)
+    print(f"Book '{catalog[b_id]['title']}' has been issued successfully!")
+
+
+def return_book(catalog):
+    print("\n--- RETURN BOOK ---")
+    b_id = input("Enter Book ID to return: ").strip()
+
+    if b_id not in catalog:
+        print("Book ID not found in system.")
+        return
+
+    if not catalog[b_id]["issued"]:
+        print("This book was not marked as issued.")
+        return
+
+    catalog[b_id]["issued"] = False
+    save_all_books(catalog)
+    print(f"Book '{catalog[b_id]['title']}' returned successfully!")
 
 
 def main():
-    library = Library()
+    books_catalog = load_all_books()
+    
     while True:
-        print("\n=============================")
-        print("  LIBRARY MANAGEMENT SYSTEM  ")
-        print("=============================")
-        print("1. Add Book")
-        print("2. Display All Books")
-        print("3. Issue Book")
-        print("4. Return Book")
-        print("5. Exit")
+        print("\n=================================")
+        print("    VIT LIBRARY MANAGEMENT CLI   ")
+        print("=================================")
+        print("1. View All Books")
+        print("2. Add New Book")
+        print("3. Search Book")
+        print("4. Issue Book")
+        print("5. Return Book")
+        print("6. Exit")
         
-        choice = input("\nEnter choice (1-5): ").strip()
-        
-        if choice == "1":
-            b_id = input("Enter Book ID: ").strip()
-            title = input("Enter Title: ").strip()
-            author = input("Enter Author: ").strip()
-            if b_id and title and author:
-                library.add_book(b_id, title, author)
-            else:
-                print("\n[!] Inputs cannot be empty.")
-        elif choice == "2":
-            library.display_books()
-        elif choice == "3":
-            b_id = input("Enter Book ID to issue: ").strip()
-            library.issue_book(b_id)
-        elif choice == "4":
-            b_id = input("Enter Book ID to return: ").strip()
-            library.return_book(b_id)
-        elif choice == "5":
-            print("\nExiting System. Goodbye!")
+        user_choice = input("\nSelect an option (1-6): ").strip()
+
+        if user_choice == "1":
+            show_books(books_catalog)
+        elif user_choice == "2":
+            add_new_book(books_catalog)
+        elif user_choice == "3":
+            search_books(books_catalog)
+        elif user_choice == "4":
+            issue_book(books_catalog)
+        elif user_choice == "5":
+            return_book(books_catalog)
+        elif user_choice == "6":
+            print("\nClosing Library System. Have a nice day!")
             break
         else:
-            print("\n[!] Invalid choice. Please enter a number between 1 and 5.")
+            print("Invalid choice, please select between 1 and 6.")
+
 
 if __name__ == "__main__":
     main()
